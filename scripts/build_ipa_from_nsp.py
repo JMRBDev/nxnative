@@ -1728,6 +1728,22 @@ def main(args=None):
     if not want_lang: raise BuildError(f'unknown game language {lang_in!r}; give one of {language_list([c for c, _ in nacp.LANGUAGES])}, by code or by name')
     env = dict(os.environ, PATH=os.pathsep.join(TOOL_PATHS + [os.environ.get('PATH', '/usr/bin:/bin:/usr/sbin:/sbin')]))
     env.setdefault('USER', getpass.getuser())   # xcodegen fails without USER (Couldn't find current username)
+    # nx_extract is a framework-dependent .NET app: without DOTNET_ROOT the apphost refuses to start it
+    # even when dotnet is on PATH, because a Homebrew install is a symlink into Cellar and the runtime
+    # lives in …/libexec, which is not a registered location. The root is parsed from
+    # `dotnet --list-runtimes`; the binary's own directory would be …/bin. Into os.environ too: some
+    # steps run without env= and inherit this process's environment.
+    if not env.get('DOTNET_ROOT') and (dn := shutil.which('dotnet', path=env['PATH'])):
+        root = None
+        try:
+            out = subprocess.run([dn, '--list-runtimes'], capture_output=True, text=True, timeout=60).stdout
+            for ln in out.splitlines():
+                if not ln.startswith('Microsoft.NETCore.App'): continue
+                p = ln[ln.rfind('[') + 1:ln.rfind(']')] if '[' in ln else ''
+                root = p[:-len('/shared/Microsoft.NETCore.App')] if p.endswith('/shared/Microsoft.NETCore.App') else (p or None)
+                break
+        except Exception: pass
+        env['DOTNET_ROOT'] = os.environ['DOTNET_ROOT'] = root or str(Path(dn).resolve().parent)
     env.setdefault('J', str(os.cpu_count() or 8))   # shader_split.py's and dmsh_build.py's workers (their default is 8)
     py = sys.executable
     app, fam = scan_nsps(nsp_dir)
