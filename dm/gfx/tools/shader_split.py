@@ -1659,7 +1659,7 @@ def var_pairs(found):
         if g: var[g][st] = skey(ctl, code)
     return {(v['vs'], v['ps']) + (('prog',) if '#BAHS#prog' in g else ()) for g, v in var.items() if 'vs' in v and 'ps' in v}
 
-def scan_file(args):
+def scan_file_raw(args):
     """→ (relative path, {key: …}, pairs, extra); extra = this file's Unity type trees, or 'defer' (no type tree, scanned again in the second pass)"""
     path, rel = args[:2]
     stem, ext = os.path.splitext(path)
@@ -1731,6 +1731,15 @@ def scan_file(args):
         # main's 49). Metroid Dread's MSHD files hold GLSLC outputs too, which mshd_shaders already reads; no other profile's loose files hold any
         if not found and d[:4] != b'MSHD' and b'\x91\x68\x86\x19' in d: found += glslc_shaders(d, '/' + rel, need=False)
     return rel, uniq_keys(found), var_pairs(found), trees
+
+def scan_file(args):
+    """scan_file_raw, but one unreadable archive ends that file and not the split. A single malformed
+    archive used to abort the whole run: Mario Strikers' Next Level Games archives (879 of them, an
+    IndexError in nlg_shaders on the first one) killed a 40-minute build with nothing packed"""
+    try: return scan_file_raw(args)
+    except Exception as e:
+        print(f'[RED] {args[1]}: {type(e).__name__}: {e} (its shaders are left out, the rest of the split goes on)', flush=True)
+        return args[1], {}, set(), {}
 
 def uniq_keys(found):
     uniq = {}

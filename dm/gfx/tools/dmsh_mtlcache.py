@@ -52,7 +52,10 @@ class Cache:
         if os.path.exists(p):
             clone(p, lib); self.count((target, 'reused')); return
         tmp = f'{lib}.tmp-{os.getpid()}-{threading.get_ident()}'
-        self._compile(target, msl, tmp)
+        try: self._compile(target, msl, tmp)
+        except subprocess.CalledProcessError as e:
+            if e.returncode >= 0: raise          # a diagnostic from the compiler: deterministic, keep it
+            self._compile(target, msl, tmp)      # the compiler died on a signal (a crash under a full build): one more try, then the error stands
         os.replace(tmp, lib)
         os.makedirs(os.path.dirname(p), exist_ok=True); clone(lib, p); self.count((target, 'compiled'))
 
